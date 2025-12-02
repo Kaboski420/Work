@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: virality-engine
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/virality-prediction.git
+    targetRevision: main
+    path: k8s
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-production.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: virality-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: virality-engine-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/virality-prediction.git
+    targetRevision: develop
+    path: k8s
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: virality-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+

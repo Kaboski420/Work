@@ -1,0 +1,76 @@
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: virality-engine-api
+  namespace: default
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: virality-engine-api
+  service:
+    port: 8000
+    targetPort: 8000
+    portDiscovery: true
+    gateways:
+    - virality-engine-gateway
+    hosts:
+    - virality-api.example.com
+  analysis:
+    interval: 1m
+    threshold: 5
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+    - name: request-success-rate
+      thresholdRange:
+        min: 95
+      interval: 1m
+    - name: request-duration
+      thresholdRange:
+        max: 2000
+      interval: 1m
+    - name: error-rate
+      thresholdRange:
+        max: 5
+      interval: 1m
+    webhooks:
+    - name: load-test
+      type: pre-rollout
+      url: http://flagger-loadtester.default/
+      timeout: 5m
+      metadata:
+        cmd: "hey -z 2m -q 10 -c 2 http://virality-engine-api-canary.default:8000/health"
+    - name: acceptance-test
+      type: pre-rollout
+      url: http://flagger-loadtester.default/
+      timeout: 30s
+      metadata:
+        type: "bash"
+        cmd: "curl -f http://virality-engine-api-canary.default:8000/health || exit 1"
+---
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  name: request-success-rate
+  namespace: default
+spec:
+  provider:
+    type: prometheus
+    address: http://prometheus:9090
+  query: |
+    sum(
+      rate(
+        http_requests_total{
+          service="virality-engine-api",
+          status!~"5.."
+        }[{{ interval }}]
+      )
+    ) / sum(
+      rate(
+        http_requests_total{
+          service="virality-engine-api"
+        }[{{ interval }}]
+      )
+    ) * 100
+

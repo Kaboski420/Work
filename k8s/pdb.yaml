@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: virality-engine-api-pdb
+  labels:
+    app: virality-engine
+    component: api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: virality-engine
+      component: api
+

@@ -1,0 +1,139 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: virality-engine-api
+  labels:
+    app: virality-engine
+    component: api
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    canary:
+      steps:
+      - setWeight: 10
+      - pause: {duration: 5m}
+      - setWeight: 25
+      - pause: {duration: 5m}
+      - setWeight: 50
+      - pause: {duration: 10m}
+      - setWeight: 100
+      trafficRouting:
+        nginx:
+          stableIngress: virality-engine-api-stable
+          annotationPrefix: nginx.ingress.kubernetes.io
+          additionalIngressAnnotations:
+            canary-by-header: "X-Canary"
+            canary-by-header-value: "true"
+      analysis:
+        templates:
+        - templateName: success-rate
+        - templateName: latency
+        startingStep: 2
+        args:
+        - name: service-name
+          value: virality-engine-api
+        - name: error-rate-threshold
+          value: "0.05"
+        - name: latency-threshold
+          value: "2000"
+      autoPromotionEnabled: false
+      autoPromotionSeconds: 0
+  selector:
+    matchLabels:
+      app: virality-engine
+      component: api
+  template:
+    metadata:
+      labels:
+        app: virality-engine
+        component: api
+        version: v1.0.0
+    spec:
+      containers:
+      - name: api
+        image: virality-engine:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: virality-secrets
+              key: postgres-host
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: virality-secrets
+              key: postgres-password
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-service:9092"
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+spec:
+  metrics:
+  - name: success-rate
+    interval: 30s
+    count: 10
+    successCondition: result[0] >= 0.95
+    failureCondition: result[0] < 0.90
+    provider:
+      prometheus:
+        address: http://prometheus:9090
+        query: |
+          sum(rate(http_requests_total{service="virality-engine-api",status!~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{service="virality-engine-api"}[5m]))
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: latency
+spec:
+  metrics:
+  - name: latency
+    interval: 30s
+    count: 10
+    successCondition: result[0] <= 2000
+    failureCondition: result[0] > 3000
+    provider:
+      prometheus:
+        address: http://prometheus:9090
+        query: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{service="virality-engine-api"}[5m])) by (le)
+          ) * 1000
+
