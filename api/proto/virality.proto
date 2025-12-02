@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package virality;
+
+// Virality Scoring Service
+service ViralityService {
+  // Health check
+  rpc HealthCheck(HealthRequest) returns (HealthResponse);
+  
+  // Score content
+  rpc ScoreContent(ScoringRequest) returns (ScoringResponse);
+  
+  // Ingest content
+  rpc IngestContent(IngestRequest) returns (IngestResponse);
+  
+  // Analyze content (ingest + score)
+  rpc AnalyzeContent(AnalyzeRequest) returns (AnalyzeResponse);
+}
+
+// Health check
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string service = 2;
+  string version = 3;
+}
+
+// Scoring request
+message ScoringRequest {
+  string content_id = 1;
+  map<string, string> features = 2;
+  map<string, string> embeddings = 3;
+  map<string, string> metadata = 4;
+}
+
+message ScoringResponse {
+  string content_id = 1;
+  string timestamp = 2;
+  float virality_probability = 3;
+  float confidence_level = 4;
+  repeated AttributionInsight attribution_insights = 5;
+  ModelLineage model_lineage = 6;
+  Recommendations recommendations = 7;
+}
+
+message AttributionInsight {
+  string factor = 1;
+  float weight = 2;
+  string impact = 3;
+}
+
+message ModelLineage {
+  string model_version = 1;
+  string reproducibility_hash = 2;
+  string training_timestamp = 3;
+}
+
+message Recommendations {
+  repeated string tactical = 1;
+  repeated string strategic = 2;
+}
+
+// Ingest request
+message IngestRequest {
+  bytes content_data = 1;
+  string content_type = 2;
+  string platform = 3;
+  string caption = 4;
+  string description = 5;
+  repeated string hashtags = 6;
+}
+
+message IngestResponse {
+  string content_id = 1;
+  string platform = 2;
+  string content_type = 3;
+  string timestamp = 4;
+  map<string, string> embeddings = 5;
+  map<string, string> features = 6;
+  map<string, string> metadata = 7;
+  string storage_path = 8;
+}
+
+// Analyze request (combines ingest + score)
+message AnalyzeRequest {
+  bytes content_data = 1;
+  string content_type = 2;
+  string platform = 3;
+  string caption = 4;
+  string description = 5;
+  repeated string hashtags = 6;
+}
+
+message AnalyzeResponse {
+  string content_id = 1;
+  string timestamp = 2;
+  map<string, string> embeddings = 3;
+  map<string, string> features = 4;
+  map<string, string> metadata = 5;
+  ScoringResponse scoring = 6;
+}
+
+
+
+
